@@ -1,0 +1,20 @@
+{
+  "name": "Carnet de dépenses",
+  "short_name": "Dépenses",
+  "description": "Note tes dépenses à la voix et suis-les par jour, mois et année.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "fr",
+  "dir": "ltr",
+  "theme_color": "#2747A8",
+  "background_color": "#EEF1F6",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

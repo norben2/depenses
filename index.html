@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'none'; base-uri 'self'; form-action 'self'">
+<title>Carnet de dépenses</title>
+<meta name="theme-color" content="#2747A8">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+</head>
+<body>
+<style>
+/* Layout : une colonne façon carnet de poche — saisie vocale en haut, période + totaux, puis le détail. */
+:root{
+  --bg:#EEF1F6; --paper:#FFFFFF; --ink:#18213A; --muted:#5E6886; --line:#D6DCE8;
+  --accent:#2747A8; --accent-ink:#FFFFFF; --accent-soft:#DCE4F8; --danger:#B3261E; --ok:#1E7A4C;
+  --f-display:"Bricolage Grotesque",ui-rounded,system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --c-alim:#2F8F5B; --c-resto:#D9822B; --c-transport:#2E74C9; --c-logement:#7A5AC8; --c-loisirs:#D14E8A;
+  --c-sante:#1E9E9A; --c-shopping:#B8902A; --c-brico:#A0522D; --c-voiture:#4B5563; --c-cadeaux:#C8413B; --c-travail:#5B6FD6; --c-autre:#8A93A8;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1424; --paper:#182036; --ink:#E8ECF6; --muted:#9AA4C0; --line:#2A3452;
+  --accent:#8EA8F2; --accent-ink:#0F1424; --accent-soft:#25325A; --danger:#F2867E; --ok:#6FD39C;
+  --c-alim:#5CC48A; --c-resto:#F0A458; --c-transport:#6BA6EE; --c-logement:#A890EC; --c-loisirs:#EE85B6;
+  --c-sante:#52CFC9; --c-shopping:#E0BC58; --c-brico:#D2895E; --c-voiture:#A3ADBD; --c-cadeaux:#F07A73; --c-travail:#97A6F5; --c-autre:#7C86A0;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1424; --paper:#182036; --ink:#E8ECF6; --muted:#9AA4C0; --line:#2A3452;
+  --accent:#8EA8F2; --accent-ink:#0F1424; --accent-soft:#25325A; --danger:#F2867E; --ok:#6FD39C;
+  --c-alim:#5CC48A; --c-resto:#F0A458; --c-transport:#6BA6EE; --c-logement:#A890EC; --c-loisirs:#EE85B6;
+  --c-sante:#52CFC9; --c-shopping:#E0BC58; --c-brico:#D2895E; --c-voiture:#A3ADBD; --c-cadeaux:#F07A73; --c-travail:#97A6F5; --c-autre:#7C86A0;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45}
+.wrap{max-width:560px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--f-display);font-weight:800;font-size:1.75rem;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.today{color:var(--muted);font-size:.9rem}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Saisie */
+.entry{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.entry-row{display:flex;gap:10px;align-items:center}
+.mic{flex:none;width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;transition:transform .15s}
+.mic svg{width:24px;height:24px}
+.mic.on{background:var(--danger);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.08)}}
+@media (prefers-reduced-motion:reduce){.mic.on{animation:none}}
+.field{flex:1;min-width:0;display:flex;border:1.5px solid var(--line);border-radius:14px;background:var(--bg);overflow:hidden}
+.field input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:inherit;padding:12px}
+.field input::placeholder{color:var(--muted)}
+.field button{border:0;background:transparent;color:var(--accent);font-weight:700;padding:0 14px}
+.hint{font-size:.85rem;color:var(--muted);margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px dashed var(--line);background:transparent;border-radius:999px;padding:4px 10px;font-size:.82rem;color:var(--muted)}
+.msg{font-size:.88rem;margin:0;padding:8px 10px;border-radius:10px;background:var(--accent-soft)}
+.msg.err{color:var(--danger)}
+.msg .undo{border:0;background:none;color:var(--accent);font-weight:700;text-decoration:underline;padding:0 0 0 6px}
+
+/* Période */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.tabs button{border:0;background:transparent;border-radius:9px;padding:8px;font-weight:700;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.nav button{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-size:1.1rem}
+.nav button:disabled{opacity:.35;cursor:default}
+.period{font-family:var(--f-display);font-weight:700;font-size:1.1rem;text-align:center;text-transform:capitalize}
+
+.total{display:flex;flex-direction:column;gap:2px}
+.total .label{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.total .amount{font-family:var(--f-num);font-weight:600;font-size:2.6rem;letter-spacing:-.03em;line-height:1.1}
+.total .sub{color:var(--muted);font-size:.9rem}
+
+.chart{display:flex;align-items:flex-end;gap:2px;height:84px;border-bottom:1px solid var(--line);padding-top:4px}
+.chart .col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.chart .bar{background:var(--accent);border-radius:3px 3px 0 0;min-height:0;opacity:.85}
+.chart .col.cur .bar{opacity:1;background:var(--ink)}
+.axis{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-top:4px}
+
+h2{font-family:var(--f-display);font-weight:700;font-size:1.05rem;margin:0}
+section{display:flex;flex-direction:column;gap:10px}
+.cats{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
+.cat{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center}
+.dot{width:10px;height:10px;border-radius:3px}
+.cat .name{font-weight:700;font-size:.95rem;min-width:0}
+.cat .val{font-family:var(--f-num);font-size:.92rem}
+.cat .track{grid-column:2/4;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.cat .fill{height:100%;border-radius:3px}
+.cat .pct{color:var(--muted);font-size:.8rem;margin-left:6px}
+
+.day{display:flex;flex-direction:column;gap:6px}
+.day-h{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line);padding-bottom:4px}
+.item{display:grid;grid-template-columns:4px 1fr auto auto;gap:10px;align-items:center;background:var(--paper);border-radius:12px;padding:10px 8px 10px 0;border:1px solid var(--line)}
+.item .stripe{align-self:stretch;border-radius:0 3px 3px 0}
+.item .txt{min-width:0;display:flex;flex-direction:column;gap:2px}
+.item .desc{font-weight:700;overflow-wrap:anywhere}
+.item select{font:inherit;font-size:.82rem;color:var(--muted);background:transparent;border:0;padding:0;max-width:100%;cursor:pointer}
+.item .amt{font-family:var(--f-num);font-weight:600}
+.item .del{border:0;background:transparent;color:var(--muted);width:32px;height:32px;border-radius:8px;font-size:1.1rem}
+.item .del.confirm{width:auto;padding:0 8px;color:var(--danger);font-size:.8rem;font-weight:700}
+
+.empty{background:var(--paper);border:1.5px dashed var(--line);border-radius:14px;padding:18px;color:var(--muted);text-align:center}
+.status{font-size:.78rem;color:var(--muted);text-align:center}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Carnet de dépenses</h1>
+    <span class="today" id="todayLabel"></span>
+  </header>
+
+  <div class="entry">
+    <div class="entry-row">
+      <button class="mic" id="mic" aria-label="Dicter une dépense">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3" fill="none"/><path d="M5 11a7 7 0 0 0 14 0" fill="none"/><path d="M12 18v4" fill="none"/></svg>
+      </button>
+      <form class="field" id="form">
+        <input id="say" autocomplete="off" enterkeyhint="done" placeholder="5 € de courses et 20 € d'essence" aria-label="Dépense dictée ou écrite">
+        <button type="submit">Ajouter</button>
+      </form>
+    </div>
+    <p class="hint">Appuie sur le micro et parle, ou touche le champ et utilise le micro de ton clavier. Dis « hier » pour la veille.</p>
+    <div class="chips" id="chips"></div>
+    <p class="msg" id="msg" hidden></p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" data-v="day" id="tab-day">Jour</button>
+    <button role="tab" data-v="month" id="tab-month">Mois</button>
+    <button role="tab" data-v="year" id="tab-year">Année</button>
+  </div>
+
+  <div class="nav">
+    <button id="prev" aria-label="Période précédente">‹</button>
+    <div class="period" id="periodLabel"></div>
+    <button id="next" aria-label="Période suivante">›</button>
+  </div>
+
+  <div class="total">
+    <span class="label">Total dépensé</span>
+    <span class="amount" id="total">0,00 €</span>
+    <span class="sub" id="totalSub"></span>
+  </div>
+
+  <div id="chartBox"></div>
+
+  <section>
+    <h2>Par catégorie</h2>
+    <ul class="cats" id="cats"></ul>
+  </section>
+
+  <section>
+    <h2>Détail</h2>
+    <div id="list"></div>
+  </section>
+
+  <p class="status" id="status">Connexion au carnet…</p>
+</div>
+
+<script id="parser">
+const CATS = [
+  {id:"alim", name:"Alimentation", kw:["courses","supermarche","super marche","manger","nourriture","epicerie","boulangerie","pain","baguette","carrefour","leclerc","auchan","lidl","intermarche","aldi","monoprix","franprix","casino","marche","boucherie","fromagerie","fruits","legumes","primeur","bouffe","alimentation"]},
+  {id:"resto", name:"Restaurants", kw:["resto","restaurant","restau","cafe","fast food","fast-food","mcdo","mcdonald","burger","kebab","pizza","pizzeria","brasserie","bar","sandwich","dejeuner","diner","uber eats","deliveroo","sushi","tacos","boisson","verre"]},
+  {id:"transport", name:"Transport", kw:["essence","carburant","gasoil","gazole","diesel","plein","train","sncf","tgv","metro","bus","tram","navigo","peage","parking","taxi","uber","vtc","avion","billet","trottinette","velo"]},
+  {id:"logement", name:"Logement", kw:["loyer","electricite","edf","gaz","eau","internet","box","assurance habitation","charges","facture","forfait","abonnement telephone","chauffage"]},
+  {id:"loisirs", name:"Loisirs", kw:["cine","cinema","sortie","abonnement","netflix","spotify","disney","jeu","jeux","concert","livre","sport","salle de sport","musee","spectacle","piscine","bowling"]},
+  {id:"sante", name:"Santé", kw:["pharmacie","medecin","docteur","medicament","medicaments","dentiste","mutuelle","kine","opticien","lunettes","ordonnance","consultation","sante"]},
+  {id:"shopping", name:"Shopping", kw:["vetement","vetements","habits","fringues","chaussures","baskets","tee-shirt","t-shirt","pantalon","pull","veste","high-tech","high tech","ordinateur","telephone","portable","amazon","ecouteurs","shopping","fnac","darty"]},
+  {id:"brico", name:"Bricolage maison", kw:["bricolage","bricole","outil","outils","vis","visserie","cheville","chevilles","bois","planche","planches","tasseau","tasseaux","etagere","etageres","peinture","pinceau","leroy merlin","leroy","castorama","casto","brico depot","bricomarche","perceuse","visseuse","colle","quincaillerie","clou","clous","mastic","silicone","joint","scie","meche","meches"]},
+  {id:"voiture", name:"Entretien voiture", kw:["voiture","vidange","huile moteur","pneu","pneus","plaquette","plaquettes","frein","freins","norauto","feu vert","speedy","midas","garage","piece auto","pieces auto","filtre","filtre a huile","filtre a air","batterie","controle technique","lave-glace","lave glace","essuie-glace","essuie glace","bougie","bougies","courroie","liquide de refroidissement","mecanique","entretien"]},
+  {id:"cadeaux", name:"Cadeaux et occasions", kw:["cadeau","cadeaux","anniversaire","anniv","fete","soiree","apero","aperitif","copains","copain","potes","amis","famille","noel","mariage","bapteme","bouquet","fleurs","invitation"]},
+  {id:"travail", name:"Repas au travail", kw:["cantine","self","restaurant d entreprise","resto d entreprise","ticket resto","ticket restaurant","titre restaurant","carte resto","au travail","au boulot","au taf","au bureau","du travail","du boulot","repas du midi","midi","pause dej","pause dejeuner","entre collegues","collegues","collegue","distributeur","machine a cafe","cafeteria"]},
+  {id:"autre", name:"Autre", kw:[]}
+];
+const WEAK = new Set(["dejeuner","sandwich","cafe","midi","amis","copains","copain","potes","famille","entretien","plein","bar","verre","pain","bois","joint"]);
+const CAT_BY_ID = Object.fromEntries(CATS.map(c=>[c.id,c]));
+
+function norm(s){return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[’']/g," ").replace(/\s+/g," ").trim()}
+const esc = s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+const KW_RE = CATS.flatMap(c=>c.kw.map(k=>({cat:c.id,k,re:new RegExp("(^|[^a-z])"+esc(k).replace(/ /g,"[ -]")+"(s|x)?(?=$|[^a-z])"),w:(WEAK.has(k)?0.4:1)+k.length/40})));
+
+function categorize(text){
+  const t=norm(text), score={};
+  for(const {cat,re,w} of KW_RE) if(re.test(t)) score[cat]=(score[cat]||0)+w;
+  let best="autre",bs=0;
+  for(const [c,s] of Object.entries(score)) if(s>bs){bs=s;best=c}
+  return best;
+}
+
+const NUMW={un:1,une:1,deux:2,trois:3,quatre:4,cinq:5,six:6,sept:7,huit:8,neuf:9,dix:10,onze:11,douze:12,treize:13,quatorze:14,quinze:15,seize:16,"dix-sept":17,"dix-huit":18,"dix-neuf":19,vingt:20,trente:30,quarante:40,cinquante:50,soixante:60,"soixante-dix":70,"quatre-vingt":80,"quatre-vingts":80,"quatre-vingt-dix":90,cent:100,mille:1000};
+function wordsToDigits(t){
+  // "vingt euros" → "20 euros" ; seulement devant euro(s) pour éviter de toucher aux descriptions
+  return t.replace(/\b([a-z-]+(?:[ -](?:et[ -])?[a-z-]+)?)\s+(euros?)\b/g,(m,w,e)=>{
+    const parts=w.split(/[ -]+/).filter(p=>p!=="et");let total=0,ok=true;
+    for(const p of parts){ if(NUMW[p]!=null){ total = (NUMW[p]===100&&total)? total*100 : total+NUMW[p]; } else {ok=false;break} }
+    if(ok&&total>0) return total+" "+e;
+    const last=w.split(/[ -]+/).pop(); if(NUMW[last]!=null) return w.slice(0,w.length-last.length)+NUMW[last]+" "+e;
+    return m;
+  });
+}
+
+const AMOUNT_RE=/(\d+(?:[.,]\d{1,2})?)\s*(?:€|euros?|eur)\s*(?:et\s*)?(\d{1,2})?(?:\s*(?:centimes?|cts?))?(?![\d.,])|(\d+(?:[.,]\d{1,2})?)(?![\d])/;
+
+function dayOffset(t){
+  if(/\bavant[ -]hier\b/.test(t)) return -2;
+  if(/\bhier\b/.test(t)) return -1;
+  return 0;
+}
+
+const FILLER=/\b(j ai|j avais|on a|j|ai|depense|depenses|depensee|paye|payee|achete|achetee|aujourd hui|avant[ -]hier|hier|ce matin|ce soir|ce midi|pour|de|du|des|d|le|la|les|l|un|une|au|aux|a|en|chez|dans|mon|ma|mes|et|puis|plus|euros?|eur|centimes?|environ|a peu pres)\b/g;
+
+function describe(seg){
+  let d=norm(seg).replace(/€/g," ").replace(/\d+(?:[.,]\d+)?/g," ").replace(FILLER," ").replace(/[.,;:!?]/g," ").replace(/\s+/g," ").trim();
+  if(!d) return "";
+  return d.charAt(0).toUpperCase()+d.slice(1);
+}
+
+function parseSpeech(raw){
+  if(!raw||!raw.trim()) return [];
+  let t = wordsToDigits(raw.toLowerCase().replace(/(\d)\s*,\s*(\d)/g,"$1,$2"));
+  const off = dayOffset(norm(t));
+  // découpe en segments sur les liaisons
+  let segs = t.split(/\s+(?:et|puis|plus|ensuite)\s+|[;.!?]\s+|,\s+(?!\d)/).map(s=>s.trim()).filter(Boolean);
+  // fusionne les segments sans montant avec leur voisin
+  const hasAmt=s=>AMOUNT_RE.test(s);
+  const merged=[];
+  for(const s of segs){
+    if(hasAmt(s)) merged.push(s);
+    else if(merged.length) merged[merged.length-1]+=" "+s;
+    else merged.push(s);
+  }
+  // un segment initial sans montant est collé au suivant
+  if(merged.length>1 && !hasAmt(merged[0])){ merged[1]=merged[0]+" "+merged[1]; merged.shift(); }
+  const out=[];
+  for(const s of merged){
+    const m=s.match(AMOUNT_RE); if(!m) continue;
+    let amt;
+    if(m[1]!=null){ amt=parseFloat(m[1].replace(",",".")); if(m[2]!=null && !/[.,]/.test(m[1])) amt+=parseInt(m[2],10)/100; }
+    else amt=parseFloat(m[3].replace(",","."));
+    if(!(amt>0) || amt>100000) continue;
+    const cat=categorize(s);
+    out.push({amount:Math.round(amt*100)/100, cat, desc:describe(s)||CAT_BY_ID[cat].name, dayOffset:off});
+  }
+  return out;
+}
+</script>
+
+<script>
+const $=id=>document.getElementById(id);
+const eur=n=>n.toLocaleString("fr-FR",{style:"currency",currency:"EUR"});
+const pad=n=>String(n).padStart(2,"0");
+const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const catColor=id=>`var(--c-${id})`;
+
+let expenses=[];           // {id,date,amount,cat,desc,createdAt}
+let store=null;            // {add,remove,update}
+let view="day";
+let cursor=new Date();
+let pendingDelete=null;
+
+$("todayLabel").textContent=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+
+/* ---------- Stockage ---------- */
+const LS_KEY="carnet-depenses-v1";
+function lsLoad(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[]}catch(e){return []}}
+function lsSave(){try{localStorage.setItem(LS_KEY,JSON.stringify(expenses))}catch(e){}}
+function localStore(note){
+  expenses=lsLoad(); $("status").textContent=note; render();
+  return {
+    async add(e){e.id=e.id||("l"+Date.now()+Math.random().toString(36).slice(2,6));expenses.push(e);lsSave();render();return e.id},
+    async remove(id){expenses=expenses.filter(e=>e.id!==id);lsSave();render()},
+    async update(id,patch){const e=expenses.find(x=>x.id===id);if(e)Object.assign(e,patch);lsSave();render()}
+  };
+}
+async function initStore(){
+  let db=null,user=null;
+  try{ if(window.claude&&claude.use){ [db,user]=await Promise.all([claude.use("db"),claude.use("user")]); } }catch(e){}
+  const uid = user ? await user.id().catch(()=>null) : null;
+  if(!db||!uid){ store=localStore("Enregistré dans ce navigateur uniquement."); return; }
+  const col=db.collection("data/users/"+uid).doc("carnet").collection("depenses");
+  store={
+    async add(e){const ref=col.doc();await ref.set(e);return ref.id},
+    async remove(id){await col.doc(id).delete()},
+    async update(id,patch){await col.doc(id).update(patch)}
+  };
+  col.onSnapshot(snap=>{
+    expenses=snap.docs.map(d=>({id:d.id,...d.data()}));
+    $("status").textContent="Carnet synchronisé sur ton compte, privé.";
+    render();
+  },err=>{
+    $("status").textContent="Synchronisation interrompue. Recharge la page pour reprendre.";
+  });
+}
+
+/* ---------- Ajout ---------- */
+let lastAdded=[];
+async function addFromText(text){
+  const items=parseSpeech(text);
+  if(!items.length){ showMsg("Je n'ai pas trouvé de montant. Essaie : « 12 euros de pain ».",true); return false; }
+  lastAdded=[];
+  try{
+    for(const it of items){
+      const d=new Date(); d.setDate(d.getDate()+it.dayOffset);
+      const id=await store.add({date:ymd(d),amount:it.amount,cat:it.cat,desc:it.desc,said:text.slice(0,200),createdAt:Date.now()});
+      lastAdded.push(id);
+    }
+  }catch(e){
+    showMsg(e&&e.code==="quota_exceeded"?"Le carnet est plein. Supprime d'anciennes dépenses pour continuer.":"L'enregistrement a échoué. Réessaie dans un instant.",true);
+    return false;
+  }
+  const first=new Date(); first.setDate(first.getDate()+items[0].dayOffset);
+  if(view==="day") cursor=first;
+  const summary=items.map(i=>`${eur(i.amount)} · ${CAT_BY_ID[i.cat].name}`).join(" ; ");
+  showMsg("Ajouté : "+summary+(items[0].dayOffset?` (${items[0].dayOffset===-1?"hier":"avant-hier"})`:""),false,true);
+  render();
+  return true;
+}
+let msgTimer;
+function showMsg(t,err,undo){
+  const m=$("msg"); m.hidden=false; m.className="msg"+(err?" err":""); m.textContent=t;
+  if(undo){const b=document.createElement("button");b.className="undo";b.textContent="Annuler";b.onclick=async()=>{for(const id of lastAdded) await store.remove(id);lastAdded=[];showMsg("Dernier ajout annulé.")};m.appendChild(b)}
+  clearTimeout(msgTimer); msgTimer=setTimeout(()=>{m.hidden=true},9000);
+}
+$("form").addEventListener("submit",async e=>{
+  e.preventDefault(); const v=$("say").value; if(await addFromText(v)) $("say").value="";
+});
+["15 € de courses","hier 40 euros d'essence","12,50 de vis chez Leroy Merlin","35 € cadeau d'anniversaire","9 euros à la cantine"].forEach(p=>{
+  const b=document.createElement("button"); b.className="chip"; b.type="button"; b.textContent="« "+p+" »";
+  b.onclick=()=>{$("say").value=p;$("say").focus()}; $("chips").appendChild(b);
+});
+
+/* ---------- Micro ---------- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,listening=false;
+$("mic").addEventListener("click",()=>{
+  if(!SR){ showMsg("Le micro direct n'est pas disponible ici. Touche le champ et utilise le micro de ton clavier.",true); $("say").focus(); return; }
+  if(listening){ rec&&rec.stop(); return; }
+  try{
+    rec=new SR(); rec.lang="fr-FR"; rec.interimResults=true; rec.continuous=false;
+    let finalText="";
+    rec.onresult=ev=>{let interim="";for(let i=ev.resultIndex;i<ev.results.length;i++){const r=ev.results[i];if(r.isFinal)finalText+=r[0].transcript;else interim+=r[0].transcript}$("say").value=(finalText+interim).trim()};
+    rec.onerror=ev=>{ listening=false;$("mic").classList.remove("on");
+      showMsg(ev.error==="not-allowed"||ev.error==="service-not-allowed"
+        ?"Le navigateur bloque le micro sur cette page. Touche le champ et utilise le micro de ton clavier."
+        :ev.error==="no-speech"?"Je n'ai rien entendu. Réessaie en parlant près du téléphone.":"Le micro a rencontré un souci. Tu peux écrire ou dicter avec le clavier.",true); };
+    rec.onend=async()=>{ listening=false;$("mic").classList.remove("on"); const v=$("say").value.trim(); if(finalText.trim()&&v){ if(await addFromText(v)) $("say").value=""; } };
+    rec.start(); listening=true; $("mic").classList.add("on"); $("msg").hidden=true;
+  }catch(e){ showMsg("Le micro direct n'est pas disponible ici. Touche le champ et utilise le micro de ton clavier.",true); }
+});
+
+/* ---------- Périodes ---------- */
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>{view=b.dataset.v;render()}));
+$("prev").onclick=()=>shift(-1); $("next").onclick=()=>shift(1);
+function shift(n){const d=new Date(cursor);if(view==="day")d.setDate(d.getDate()+n);else if(view==="month"){d.setDate(1);d.setMonth(d.getMonth()+n)}else d.setFullYear(d.getFullYear()+n);cursor=d;render()}
+function inPeriod(e){const k=ymd(cursor);if(view==="day")return e.date===k;if(view==="month")return e.date.slice(0,7)===k.slice(0,7);return e.date.slice(0,4)===k.slice(0,4)}
+function isCurrentOrFuture(){const t=ymd(new Date()),k=ymd(cursor);if(view==="day")return k>=t;if(view==="month")return k.slice(0,7)>=t.slice(0,7);return k.slice(0,4)>=t.slice(0,4)}
+
+/* ---------- Rendu ---------- */
+function render(){
+  document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===view));
+  const lbl = view==="day" ? cursor.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})
+            : view==="month" ? cursor.toLocaleDateString("fr-FR",{month:"long",year:"numeric"}) : String(cursor.getFullYear());
+  $("periodLabel").textContent=lbl;
+  $("next").disabled=isCurrentOrFuture();
+
+  const list=expenses.filter(inPeriod);
+  const total=list.reduce((s,e)=>s+(+e.amount||0),0);
+  $("total").textContent=eur(total);
+  const n=list.length;
+  let sub=n?`${n} dépense${n>1?"s":""}`:"Aucune dépense";
+  if(view!=="day"&&n){
+    const now=new Date(); let days;
+    if(view==="month"){const dim=new Date(cursor.getFullYear(),cursor.getMonth()+1,0).getDate();days=(cursor.getFullYear()===now.getFullYear()&&cursor.getMonth()===now.getMonth())?now.getDate():dim}
+    else{const y=cursor.getFullYear();days=y===now.getFullYear()?Math.floor((now-new Date(y,0,1))/864e5)+1:((y%4===0&&y%100!==0)||y%400===0?366:365)}
+    sub+=` · ${eur(total/days)} par jour en moyenne`;
+  }
+  $("totalSub").textContent=sub;
+
+  renderChart(list);
+  renderCats(list,total);
+  renderList(list);
+}
+
+function renderChart(list){
+  const box=$("chartBox"); box.innerHTML="";
+  if(view==="day") return;
+  let buckets,labels,curIdx=-1;const now=new Date();
+  if(view==="month"){
+    const dim=new Date(cursor.getFullYear(),cursor.getMonth()+1,0).getDate();
+    buckets=Array(dim).fill(0); list.forEach(e=>buckets[+e.date.slice(8,10)-1]+=+e.amount);
+    labels=["1",String(Math.ceil(dim/2)),String(dim)];
+    if(cursor.getFullYear()===now.getFullYear()&&cursor.getMonth()===now.getMonth()) curIdx=now.getDate()-1;
+  }else{
+    buckets=Array(12).fill(0); list.forEach(e=>buckets[+e.date.slice(5,7)-1]+=+e.amount);
+    labels=["janv.","juin","déc."];
+    if(cursor.getFullYear()===now.getFullYear()) curIdx=now.getMonth();
+  }
+  const max=Math.max(...buckets,0);
+  const chart=document.createElement("div"); chart.className="chart"; chart.setAttribute("role","img");
+  chart.setAttribute("aria-label",view==="month"?"Dépenses par jour du mois":"Dépenses par mois de l'année");
+  buckets.forEach((v,i)=>{const c=document.createElement("div");c.className="col"+(i===curIdx?" cur":"");c.title=(view==="month"?`${i+1} : `:`${new Date(2000,i,1).toLocaleDateString("fr-FR",{month:"long"})} : `)+eur(v);
+    const b=document.createElement("div");b.className="bar";b.style.height=max?(v/max*100)+"%":"0";c.appendChild(b);chart.appendChild(c)});
+  const ax=document.createElement("div"); ax.className="axis num"; labels.forEach(l=>{const s=document.createElement("span");s.textContent=l;ax.appendChild(s)});
+  const cap=document.createElement("div"); cap.className="axis"; cap.innerHTML="";
+  box.append(chart,ax);
+  if(max){const m=document.createElement("div");m.className="axis";const s=document.createElement("span");s.textContent=`Plus haut : ${eur(max)}`;m.appendChild(s);box.appendChild(m)}
+}
+
+function renderCats(list,total){
+  const ul=$("cats"); ul.innerHTML="";
+  const by={}; list.forEach(e=>by[e.cat]=(by[e.cat]||0)+(+e.amount));
+  const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]);
+  if(!rows.length){const li=document.createElement("li");li.className="empty";li.textContent="Les catégories apparaîtront ici dès ta première dépense de la période.";ul.appendChild(li);return}
+  for(const [id,v] of rows){
+    const c=CAT_BY_ID[id]||CAT_BY_ID.autre, pct=total?Math.round(v/total*100):0;
+    const li=document.createElement("li"); li.className="cat";
+    li.innerHTML=`<span class="dot" style="background:${catColor(c.id)}"></span><span class="name"></span><span class="val num"></span><div class="track"><div class="fill" style="width:${pct}%;background:${catColor(c.id)}"></div></div>`;
+    li.querySelector(".name").textContent=c.name;
+    li.querySelector(".val").innerHTML=`${eur(v)}<span class="pct">${pct} %</span>`;
+    ul.appendChild(li);
+  }
+}
+
+function renderList(list){
+  const box=$("list"); box.innerHTML="";
+  if(!list.length){
+    const d=document.createElement("div");d.className="empty";
+    d.textContent= view==="day" ? "Rien de noté ce jour-là. Dis par exemple « 8 euros de pain et 30 euros d'essence »." : "Aucune dépense sur cette période.";
+    box.appendChild(d); return;
+  }
+  const groups={}; list.forEach(e=>(groups[e.date]=groups[e.date]||[]).push(e));
+  Object.keys(groups).sort().reverse().forEach(date=>{
+    const items=groups[date].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    const g=document.createElement("div"); g.className="day";
+    const h=document.createElement("div"); h.className="day-h";
+    const [y,m,dd]=date.split("-").map(Number);
+    const a=document.createElement("span"); a.textContent=new Date(y,m-1,dd).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"});
+    const b=document.createElement("span"); b.className="num"; b.textContent=eur(items.reduce((s,e)=>s+(+e.amount),0));
+    h.append(a,b); g.appendChild(h);
+    items.forEach(e=>g.appendChild(itemRow(e)));
+    box.appendChild(g);
+  });
+}
+
+function itemRow(e){
+  const row=document.createElement("div"); row.className="item";
+  const stripe=document.createElement("span"); stripe.className="stripe"; stripe.style.background=catColor(e.cat);
+  const txt=document.createElement("div"); txt.className="txt";
+  const desc=document.createElement("span"); desc.className="desc"; desc.textContent=e.desc||"Dépense";
+  const sel=document.createElement("select"); sel.id="cat-"+e.id; sel.setAttribute("aria-label","Catégorie");
+  CATS.forEach(c=>{const o=document.createElement("option");o.value=c.id;o.textContent=c.name;if(c.id===e.cat)o.selected=true;sel.appendChild(o)});
+  sel.onchange=()=>store.update(e.id,{cat:sel.value});
+  txt.append(desc,sel);
+  const amt=document.createElement("span"); amt.className="amt"; amt.textContent=eur(+e.amount);
+  const del=document.createElement("button"); del.className="del"; del.setAttribute("aria-label","Supprimer");
+  if(pendingDelete===e.id){del.classList.add("confirm");del.textContent="Supprimer ?";del.onclick=()=>{pendingDelete=null;store.remove(e.id)}}
+  else{del.textContent="×";del.onclick=()=>{pendingDelete=e.id;render();setTimeout(()=>{if(pendingDelete===e.id){pendingDelete=null;render()}},4000)}}
+  row.append(stripe,txt,amt,del);
+  return row;
+}
+
+render();
+initStore();
+</script>
+
+<script>
+/* PWA : enregistre le service worker (chemin relatif, marche sous /depenses/) */
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").catch(()=>{})});
+}
+</script>
+
+</body>
+</html>
